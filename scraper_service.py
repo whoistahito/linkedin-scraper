@@ -91,11 +91,7 @@ class ScraperService:
             # Update job posting with content
             job_posting.markdown_content = markdown_content
 
-            if markdown_content:
-                # Save individual markdown file
-                if self.file_manager.save_markdown_file(job_posting.job_id, markdown_content):
-                    processed_files[job_posting.job_id] = f"job_content/{job_posting.job_id}.md"
-                    print(f"Saved job content to {job_posting.job_id}.md")
+            # Per new requirement, do not save individual markdown files; only store markdown in JSON
 
             # Add to complete jobs data regardless of markdown success
             complete_jobs_data.append(job_posting)
@@ -146,3 +142,33 @@ class ScraperService:
     def close(self):
         """Clean up resources."""
         self.linkedin_client.close()
+
+
+if __name__ == "__main__":
+    # Allow running this module directly
+    service = None
+    try:
+        print("Starting ScraperService demo run...")
+        demo_input = ScraperInput(
+            search_term="Software Engineer",
+            location="San Francisco, CA",
+            distance=50,
+            is_remote=False,
+            job_type="full-time",
+            easy_apply=False,
+            linkedin_company_ids=None,
+        )
+        service = ScraperService(delay=2.0, output_dir="job_content")
+        result = service.scrape_jobs(demo_input)
+        print("\n=== ScraperService Run Summary ===")
+        print(f"Total jobs processed: {len(result.complete_jobs_data)}")
+        print(f"Markdown files saved: {len(result.processed_files)} (disabled by default)")
+        print("JSON file: job_content/ linkedin_jobs.json")
+    except Exception as e:
+        print(f"Error during service run: {e}")
+    finally:
+        if service is not None:
+            try:
+                service.close()
+            except Exception:
+                pass

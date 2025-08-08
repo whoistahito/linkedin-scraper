@@ -60,8 +60,8 @@ class TestScraperService(unittest.TestCase):
         """Test processing job URLs successfully."""
         # Mock the content fetcher
         self.service.content_fetcher.fetch_job_content = Mock(return_value="# Test Job\nContent")
-        # Mock the file manager
-        self.service.file_manager.save_markdown_file = Mock(return_value=True)
+        # File manager should not be used to save individual markdown files
+        self.service.file_manager.save_markdown_file = Mock()
 
         job_postings = [self.sample_job_posting]
 
@@ -70,12 +70,13 @@ class TestScraperService(unittest.TestCase):
 
         self.assertIsInstance(result, ProcessingResult)
         self.assertEqual(len(result.complete_jobs_data), 1)
-        self.assertIn(self.sample_job_posting.job_id, result.processed_files)
+        # No individual markdown files should be saved
+        self.assertEqual(len(result.processed_files), 0)
         self.assertEqual(result.complete_jobs_data[0].markdown_content, "# Test Job\nContent")
 
         # Verify calls
         self.service.content_fetcher.fetch_job_content.assert_called_once_with(self.sample_job_posting.url)
-        self.service.file_manager.save_markdown_file.assert_called_once()
+        self.service.file_manager.save_markdown_file.assert_not_called()
         mock_sleep.assert_called_once_with(0.1)
 
     @patch('scraper_service.time.sleep')
@@ -118,7 +119,7 @@ class TestScraperService(unittest.TestCase):
         self.service.content_fetcher.fetch_job_content = Mock(return_value="# Test Content")
 
         # Mock file manager
-        self.service.file_manager.save_markdown_file = Mock(return_value=True)
+        self.service.file_manager.save_markdown_file = Mock()
         self.service.file_manager.save_jobs_json = Mock(return_value=True)
 
         with patch('builtins.print'):
@@ -127,7 +128,8 @@ class TestScraperService(unittest.TestCase):
         # Verify the workflow
         self.service.linkedin_client.search_jobs.assert_called_once_with(self.scraper_input, 0)
         self.service.content_fetcher.fetch_job_content.assert_called_once()
-        self.service.file_manager.save_markdown_file.assert_called_once()
+        # Should not save individual markdown files
+        self.service.file_manager.save_markdown_file.assert_not_called()
         self.service.file_manager.save_jobs_json.assert_called_once()
 
         # Verify results
@@ -149,6 +151,29 @@ class TestScraperService(unittest.TestCase):
 
         self.assertEqual(custom_service.delay, 5.0)
         self.assertEqual(custom_service.file_manager.output_dir, "custom_output")
+
+    @patch('scraper_service.time.sleep')
+    def test_no_individual_markdown_files_saved(self, mock_sleep):
+        """Ensure processed_files is empty and no markdown files are saved by default."""
+        service = ScraperService(delay=0.0, output_dir="custom_output")
+        try:
+            service.content_fetcher.fetch_job_content = Mock(return_value="# MD Content")
+            service.file_manager.save_markdown_file = Mock()
+
+            job = JobPosting(
+                job_id="abc123",
+                title="Test",
+                url="https://linkedin.com/jobs/view/abc123",
+                markdown_content=None,
+            )
+
+            with patch('builtins.print'):
+                result = service.process_job_urls([job])
+
+            self.assertEqual(result.processed_files, {})
+            service.file_manager.save_markdown_file.assert_not_called()
+        finally:
+            service.close()
 
 
 if __name__ == '__main__':

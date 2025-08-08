@@ -3,4 +3,12 @@ name = "new-job-scraper"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+	"requests",
+	"beautifulsoup4",
+	"lxml",
+	"markdownify",
+]
+
+[project.scripts]
+linkedin-scraper = "linkedin_scraper:main"
