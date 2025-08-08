@@ -101,22 +101,25 @@ def save_job_markdown(job_id: str, markdown_content: str, output_dir: str = "job
         print(f"Error saving content for job {job_id}: {e}")
         return False
 
-def process_job_urls(job_urls: List[Dict[str, str]], delay: float = 1.0) -> Dict[str, str]:
+def process_job_urls(job_urls: List[Dict[str, str]], delay: float = 1.0) -> Dict[str, any]:
     """
     Processes a list of job URLs, fetches their content, and saves as markdown.
+    Returns complete job data including markdown content.
 
     Args:
-        job_urls: List of dictionaries containing job_id and url
+        job_urls: List of dictionaries containing job_id, url, and title
         delay: Delay between requests in seconds (default: 1.0)
 
     Returns:
-        Dictionary mapping job_id to saved file path
+        Dictionary containing complete job data with markdown content
     """
     results = {}
+    complete_jobs_data = []
 
     for job_data in job_urls:
         job_id = job_data.get('job_id')
         url = job_data.get('url')
+        title = job_data.get('title', 'Unknown Title')
 
         if not job_id or not url:
             print(f"Invalid job data: {job_data}")
@@ -128,14 +131,60 @@ def process_job_urls(job_urls: List[Dict[str, str]], delay: float = 1.0) -> Dict
         markdown_content = fetch_job_content(url)
 
         if markdown_content:
-            # Save to file
+            # Save individual markdown file
             if save_job_markdown(job_id, markdown_content):
                 results[job_id] = f"job_content/{job_id}.md"
+
+            # Add to complete jobs data
+            complete_jobs_data.append({
+                "job_id": job_id,
+                "title": title,
+                "url": url,
+                "markdown_content": markdown_content
+            })
+        else:
+            # Even if markdown fetch failed, include basic data
+            complete_jobs_data.append({
+                "job_id": job_id,
+                "title": title,
+                "url": url,
+                "markdown_content": None
+            })
 
         # Rate limiting
         time.sleep(delay)
 
-    return results
+    return {
+        "processed_files": results,
+        "complete_jobs_data": complete_jobs_data
+    }
+
+def save_jobs_json(jobs_data: List[Dict], filename: str = "all_jobs.json") -> bool:
+    """
+    Saves all job data to a single JSON file.
+
+    Args:
+        jobs_data: List of job dictionaries with title, url, and markdown_content
+        filename: Name of the JSON file to save
+
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    try:
+        filepath = os.path.join("job_content", filename)
+
+        # Ensure directory exists
+        os.makedirs("job_content", exist_ok=True)
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(jobs_data, f, indent=2, ensure_ascii=False)
+
+        print(f"Saved complete jobs data to {filepath}")
+        return True
+
+    except Exception as e:
+        print(f"Error saving JSON file: {e}")
+        return False
 
 def fetch_linkedin_jobs(session: requests.Session,
                         base_url: str,
@@ -248,9 +297,12 @@ if __name__ == "__main__":
             print(f"\nProcessing {len(job_urls_for_processing)} job URLs for markdown conversion...")
 
             # Process the actual job URLs and convert to markdown
-            processed_files = process_job_urls(job_urls_for_processing, delay=2.0)  # 2 second delay to be respectful
-            print(f"\nSuccessfully processed {len(processed_files)} jobs")
-            print("Saved files:", processed_files)
+            result = process_job_urls(job_urls_for_processing, delay=2.0)  # 2 second delay to be respectful
+            print(f"\nSuccessfully processed {len(result['complete_jobs_data'])} jobs")
+            print("Saved markdown files:", result['processed_files'])
+
+            # Save all job data to a single JSON file
+            save_jobs_json(result['complete_jobs_data'], filename="linkedin_jobs.json")
 
         else:
-            print("No Java developer job postings found or an error occurred.")
+            print("No job postings found or an error occurred.")
