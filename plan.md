@@ -25,6 +25,33 @@ new-job-scraper/
 5. **Dynamic Job Search**: Search for specific job types (tested with Java Developer)
 6. **URL Processing Integration**: Complete workflow from search to markdown file generation
 7. **JSON Export**: Save all job data (title, URL, markdown content) to single consolidated JSON file
+8. **Code Refactoring**: Modular architecture with separation of concerns and unit tests
+
+## Refactored Architecture ✅
+
+### Modules Created:
+- **models.py**: Data classes (ScraperInput, JobPosting, ProcessingResult)
+- **job_mapper.py**: JobTypeMapper class for LinkedIn API code mapping
+- **content_fetcher.py**: ContentFetcher class for HTML fetching and markdown conversion
+- **file_manager.py**: FileManager class for file operations and data persistence
+- **linkedin_client.py**: LinkedInClient class for LinkedIn API interactions
+- **scraper_service.py**: ScraperService class for workflow orchestration
+- **linkedin_scraper.py**: Main entry point using the modular architecture
+
+### Unit Tests Created:
+- **test_job_mapper.py**: Tests for job type mapping functionality
+- **test_content_fetcher.py**: Tests for content fetching and markdown conversion
+- **test_file_manager.py**: Tests for file operations and JSON export
+- **test_linkedin_client.py**: Tests for LinkedIn API interactions
+- **test_scraper_service.py**: Tests for the main service orchestration
+- **run_tests.py**: Test runner script for executing all tests
+
+### Benefits of Refactoring:
+- **Testability**: Each component can be unit tested independently
+- **Maintainability**: Clear separation of concerns and single responsibility principle
+- **Extensibility**: Easy to add new features or modify existing ones
+- **Reusability**: Components can be reused in different contexts
+- **Error Handling**: Better error isolation and debugging capabilities
 
 ## Features to Implement
 1. ~~Web Scraping: Extract job listings from LinkedIn~~ ✅ (COMPLETED)
