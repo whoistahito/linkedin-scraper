@@ -2,6 +2,22 @@ import requests
 from typing import Optional, List, Dict
 from bs4 import BeautifulSoup
 import json
+import os
+from markdownify import markdownify as md
+import time
+from urllib.parse import urljoin, urlparse
+from dataclasses import dataclass
+
+@dataclass
+class ScraperInput:
+    """Input parameters for the LinkedIn job scraper."""
+    search_term: str
+    location: str
+    distance: int = 25
+    is_remote: bool = False
+    job_type: Optional[str] = None
+    easy_apply: bool = False
+    linkedin_company_ids: Optional[List[int]] = None
 
 # This is a placeholder for the actual job_type_code function.
 # You should replace it with your actual implementation.
@@ -17,26 +33,109 @@ def job_type_code(job_type: str) -> Optional[str]:
     }
     return job_type_map.get(job_type.lower())
 
-# This is a placeholder for your scraper_input object.
-# You should replace it with your actual implementation.
-class ScraperInput:
-    def __init__(
-        self,
-        search_term: str,
-        location: str,
-        distance: int,
-        is_remote: bool,
-        job_type: Optional[str] = None,
-        easy_apply: bool = False,
-        linkedin_company_ids: Optional[List[int]] = None,
-    ):
-        self.search_term = search_term
-        self.location = location
-        self.distance = distance
-        self.is_remote = is_remote
-        self.job_type = job_type
-        self.easy_apply = easy_apply
-        self.linkedin_company_ids = linkedin_company_ids
+def fetch_job_content(url: str) -> Optional[str]:
+    """
+    Fetches the HTML content from a job URL and converts it to markdown.
+
+    Args:
+        url: The job posting URL to fetch
+
+    Returns:
+        Markdown content of the job posting or None if failed
+    """
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        # Parse HTML and convert to markdown
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Remove script and style elements
+        for script in soup(["script", "style"]):
+            script.decompose()
+
+        # Convert to markdown
+        markdown_content = md(str(soup), heading_style="ATX")
+
+        return markdown_content
+
+    except requests.RequestException as e:
+        print(f"Error fetching URL {url}: {e}")
+        return None
+    except Exception as e:
+        print(f"Error processing content from {url}: {e}")
+        return None
+
+def save_job_markdown(job_id: str, markdown_content: str, output_dir: str = "job_content") -> bool:
+    """
+    Saves the markdown content of a job to a file.
+
+    Args:
+        job_id: Unique identifier for the job
+        markdown_content: The markdown content to save
+        output_dir: Directory to save the files (default: job_content)
+
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    try:
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Create filename
+        filename = f"{job_id}.md"
+        filepath = os.path.join(output_dir, filename)
+
+        # Save content
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(markdown_content)
+
+        print(f"Saved job content to {filepath}")
+        return True
+
+    except Exception as e:
+        print(f"Error saving content for job {job_id}: {e}")
+        return False
+
+def process_job_urls(job_urls: List[Dict[str, str]], delay: float = 1.0) -> Dict[str, str]:
+    """
+    Processes a list of job URLs, fetches their content, and saves as markdown.
+
+    Args:
+        job_urls: List of dictionaries containing job_id and url
+        delay: Delay between requests in seconds (default: 1.0)
+
+    Returns:
+        Dictionary mapping job_id to saved file path
+    """
+    results = {}
+
+    for job_data in job_urls:
+        job_id = job_data.get('job_id')
+        url = job_data.get('url')
+
+        if not job_id or not url:
+            print(f"Invalid job data: {job_data}")
+            continue
+
+        print(f"Processing job {job_id}: {url}")
+
+        # Fetch content
+        markdown_content = fetch_job_content(url)
+
+        if markdown_content:
+            # Save to file
+            if save_job_markdown(job_id, markdown_content):
+                results[job_id] = f"job_content/{job_id}.md"
+
+        # Rate limiting
+        time.sleep(delay)
+
+    return results
 
 def fetch_linkedin_jobs(session: requests.Session,
                         base_url: str,
@@ -96,15 +195,15 @@ def fetch_linkedin_jobs(session: requests.Session,
 
 # Example Usage:
 if __name__ == "__main__":
-    # Create a sample scraper_input object
+    # Create a sample scraper_input object for Java developer search
     my_input_obj = ScraperInput(
         search_term="Software Engineer",
         location="San Francisco, CA",
         distance=50,
         is_remote=False,
         job_type="full-time",
-        easy_apply=True,
-        linkedin_company_ids=[1035, 1651, 1441] # Example: Google, Microsoft, Apple
+        easy_apply=False,
+        linkedin_company_ids=None  # Search all companies
     )
 
     with requests.Session() as session:
@@ -113,6 +212,7 @@ if __name__ == "__main__":
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         })
 
+        # Fetch Java developer jobs from LinkedIn
         data = fetch_linkedin_jobs(session,
                                    base_url="https://www.linkedin.com",
                                    scraper_input=my_input_obj,
@@ -121,5 +221,36 @@ if __name__ == "__main__":
         if data:
             print(f"Found {len(data)} job postings.")
             print(json.dumps(data, indent=2))
+
+            # Convert the LinkedIn job data to the format expected by process_job_urls
+            # Extract job ID from URL and create the required format
+            job_urls_for_processing = []
+            for i, job in enumerate(data):
+                # Extract job ID from LinkedIn URL or use index as fallback
+                job_url = job.get('url', '')
+                job_id = f"java_job_{i+1:03d}"  # Format: java_job_001, java_job_002, etc.
+
+                # Try to extract actual job ID from URL if possible
+                if '/view/' in job_url:
+                    try:
+                        actual_id = job_url.split('/view/')[-1].split('?')[0].split('/')[0]
+                        if actual_id:
+                            job_id = f"linkedin_{actual_id}"
+                    except:
+                        pass  # Use the fallback ID
+
+                job_urls_for_processing.append({
+                    "job_id": job_id,
+                    "url": job_url,
+                    "title": job.get('title', 'Unknown Title')
+                })
+
+            print(f"\nProcessing {len(job_urls_for_processing)} job URLs for markdown conversion...")
+
+            # Process the actual job URLs and convert to markdown
+            processed_files = process_job_urls(job_urls_for_processing, delay=2.0)  # 2 second delay to be respectful
+            print(f"\nSuccessfully processed {len(processed_files)} jobs")
+            print("Saved files:", processed_files)
+
         else:
-            print("No job postings found or an error occurred.")
+            print("No Java developer job postings found or an error occurred.")
