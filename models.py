@@ -29,5 +29,5 @@ class JobPosting:
 @dataclass
 class ProcessingResult:
     """Result of processing job URLs."""
-    processed_files: Dict[str, str]
     complete_jobs_data: List[JobPosting]
+    processed_files: Dict[str, str]
