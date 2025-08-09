@@ -1,215 +1,202 @@
-# Job Scraper Project Plan
+<!--
+  LLM EXECUTION INSTRUCTIONS DOCUMENT
+  Purpose: Provide an unambiguous, hierarchical specification for an LLM agent to extend and maintain the LinkedIn job scraper project.
+  Audience: Automated coding assistant with ability to read, write, run tests, and refactor.
+-->
 
-## Overview
-Creating a LinkedIn job scraper to extract job postings and relevant information.
+# Project Execution Plan (LLM-Oriented)
 
-## Development Environment
-- **Operating System**: Windows
-- **Shell**: PowerShell
-- **Note**: All commands and scripts should be compatible with PowerShell. Use PowerShell syntax for environment variables, file paths, and command execution.
+## 1. Mission Statement
+Build and maintain a modular LinkedIn job scraping pipeline that:
+1. Searches for jobs with configurable parameters.
+2. Fetches each job posting's HTML content.
+3. Converts relevant description HTML to Markdown.
+4. Aggregates structured job data into a consolidated JSON file (and future CSV).
+5. Preserves testability, extensibility, compliance awareness, and code quality.
 
-## Project Structure
-```
-new-job-scraper/
-├── linkedin_scraper.py     # Main scraper implementation
-├── plan.md                 # Project planning document
-├── pyproject.toml         # Project configuration
-└── requirements.txt       # Python dependencies
-```
+## 2. Operating Constraints
+- Environment: Windows, PowerShell shell.
+- Python target: CURRENT=3.13 (pyproject) — may be realigned to 3.12 or 3.11 (stability). Agent must surface mismatch if adjusting.
+- Rate limiting: Respect a minimum delay between fetches (configurable).
+- Compliance: Do NOT implement aggressive scraping logic; leave placeholders with warnings where behavior could violate ToS.
+- External calls: Only use `requests` (already dependency). No headless browsers unless explicitly added later.
 
-## Features Implemented ✅
-1. **Job Type Mapping**: Convert job type strings to LinkedIn API codes
-2. **URL Content Fetching**: Extract full job content from individual job URLs
-3. **Markdown Conversion**: Convert HTML job content to markdown format using markdownify
-4. **File Storage**: Save all job content in a consolidated JSON file (individual per-job Markdown files are disabled by default)
-5. **Dynamic Job Search**: Search for specific job types (tested with Java Developer)
-6. **URL Processing Integration**: Complete workflow from search to markdown file generation
-7. **JSON Export**: Save all job data (title, URL, markdown content) to single consolidated JSON file
-8. **Code Refactoring**: Modular architecture with separation of concerns and unit tests
+## 3. Core Domain Objects (Canonical Definitions)
+| Object | Fields | Purpose |
+|--------|--------|---------|
+| ScraperInput | search_term, location, distance, is_remote, job_type, easy_apply, linkedin_company_ids | Encapsulates search filters |
+| JobPosting | job_id, title, url, markdown_content | Represents a single normalized job entry |
+| ProcessingResult | complete_jobs_data, processed_files | End-to-end processing output (processed_files currently empty) |
 
-## Refactored Architecture ✅
+## 4. Current State (Baseline Features Implemented)
+DONE:
+1. Job type mapping (job_mapper).
+2. Search abstraction (linkedin_client) — currently mocked / placeholder style.
+3. Content fetch + HTML→Markdown conversion (content_fetcher).
+4. Smart job ID extraction from URLs (`/view/` pattern).
+5. Consolidated JSON save (file_manager.save_jobs_json) with inlined markdown.
+6. Modular orchestration (scraper_service + entry script linkedin_scraper.py).
+7. Unit tests per module (test_* files; run via run_tests.py).
+8. Rate limiting via fixed delay (ScraperService.delay).
+9. Removal of per-job markdown file writes (kept structure for potential re-enable).
 
-### Modules Created:
-- **models.py**: Data classes (ScraperInput, JobPosting, ProcessingResult)
-- **job_mapper.py**: JobTypeMapper class for LinkedIn API code mapping
-- **content_fetcher.py**: ContentFetcher class for HTML fetching and markdown conversion
-- **file_manager.py**: FileManager class for file operations and data persistence
-- **linkedin_client.py**: LinkedInClient class for LinkedIn API interactions
-- **scraper_service.py**: ScraperService class for workflow orchestration
-- **linkedin_scraper.py**: Main entry point using the modular architecture
+## 5. Open Work Items (High-Level)
+PENDING (Prioritized):
+1. CLI argument layer (argparse) exposing search + output + export options.
+2. Structured logging (replace print) with levels & rotating file handler.
+3. Retry/backoff HTTP robustness (429 + 5xx) using urllib3 Retry.
+4. Pagination loop (increment `start` offsets, stop on empty page or max pages).
+5. Targeted content extraction (focus description container; filter noise).
+6. CSV export (columns: job_id,title,url,markdown_content initially).
+7. Optional random jitter in delay to emulate natural pacing.
+8. Config file support (e.g., config.toml) + environment overrides.
+9. User-Agent rotation (static safe list) + optional proxy.
+10. Test coverage expansion (pagination, retries, CSV, logging assertions).
+11. Code quality tooling (ruff, black, mypy, pre-commit hooks).
+12. GitHub Actions CI workflow (lint + tests matrix Windows/Linux).
 
-### Unit Tests Created:
-- **test_job_mapper.py**: Tests for job type mapping functionality
-- **test_content_fetcher.py**: Tests for content fetching and markdown conversion
-- **test_file_manager.py**: Tests for file operations and JSON export
-- **test_linkedin_client.py**: Tests for LinkedIn API interactions
-- **test_scraper_service.py**: Tests for the main service orchestration
-- **run_tests.py**: Test runner script for executing all tests
+## 6. Detailed Task Specifications
 
-### Benefits of Refactoring:
-- **Testability**: Each component can be unit tested independently
-- **Maintainability**: Clear separation of concerns and single responsibility principle
-- **Extensibility**: Easy to add new features or modify existing ones
-- **Reusability**: Components can be reused in different contexts
-- **Error Handling**: Better error isolation and debugging capabilities
+### 6.1 CLI Layer
+Add `cli.py` or extend `linkedin_scraper.py` to parse flags:
+--search-term, --location, --distance, --remote (flag), --job-type, --easy-apply (flag), --company-ids (comma list), --delay, --jitter, --max-pages, --output-dir, --export (json|csv|both), --log-level.
+Behavior:
+- Build ScraperInput from args.
+- Pass config to ScraperService and subordinate clients.
+Acceptance:
+- `python linkedin_scraper.py --help` lists all options with descriptions.
+- Running with flags alters observed behavior (e.g., JSON path, delay) without code changes.
 
-## Features to Implement
-1. ~~Web Scraping: Extract job listings from LinkedIn~~ ✅ (COMPLETED)
-2. ~~Data Processing: Parse and structure job data~~ ✅ (COMPLETED) 
-3. **Export Functionality**: Save results to CSV format (JSON ✅ COMPLETED)
+### 6.2 Logging System
+Replace print with `logging`:
+- Logger name root: `scraper`.
+- Handlers: console (INFO), rotating file logs/scraper.log (max 1MB * 3). 
+- Include job_id and URL in contextual messages where relevant.
+Acceptance:
+- No stray `print()` calls remain (except maybe in __main__ minimal wrapper).
+- Log file produced after one run.
 
-## Technical Requirements
-- Python 3.8+
-- Beautiful Soup for HTML parsing
-- Requests library for HTTP requests
-- markdownify for HTML to markdown conversion
-- Type hints for better code maintainability
+### 6.3 HTTP Robustness (Retries & Session)
+Implement a shared `requests.Session` with HTTPAdapter + Retry for statuses 429,500,502,503,504; backoff factor exponential; max retries default 3.
+Expose tunables via constructor or CLI: `--max-retries`, `--backoff`.
+Acceptance:
+- Simulated transient failures (mocked) eventually succeed within retry count.
+- Retry attempt logs at WARNING (or INFO with attempt number).
 
-## Current Implementation Status
-- ✅ **URL Processing**: `fetch_job_content()` function fetches HTML and converts to markdown
-- ✅ **File Management**: Consolidated JSON save via `save_jobs_json()`; individual per-job Markdown file writes are disabled by default
-- ✅ **Batch Processing**: `process_job_urls()` function handles multiple URLs with rate limiting
-- ✅ **Error Handling**: Basic error handling for network requests and file operations
-- ✅ **Rate Limiting**: 2-second delay between requests to avoid being blocked
-- ✅ **Dynamic Search**: Successfully searches for specified job types and processes results
-- ✅ **Smart ID Extraction**: Extracts actual LinkedIn job IDs from URLs for meaningful filenames
-- ✅ **Complete Workflow**: End-to-end process from job search to markdown file generation
-- ✅ **JSON Export**: `save_jobs_json()` function saves all job data to consolidated JSON file
-- ✅ **Data Structure**: Each job contains job_id, title, url, and complete markdown_content
+### 6.4 Pagination
+Loop with `start` increments (assume 25 per page unless changed) until:
+- Received empty result set OR
+- Page count == max-pages.
+Aggregate all raw jobs before processing URLs or process page-by-page (choose; document).
+Acceptance:
+- Test injecting mock pages (e.g., 2 pages then empty) yields combined job count = sum pages.
 
-## Successful Test Results
-- **Jobs Found**: 10 Software Engineer positions from companies including Tinder, Reddit, Notion, Nuro
-- **Processing**: 100% success rate - all 10 jobs processed without errors
-- **Output Files**: 
-  - 10 individual markdown files in `job_content/` directory
-  - 1 consolidated JSON file (`linkedin_jobs.json`) with all job data
-- **Content Quality**: Complete job descriptions with salary ranges, requirements, and company details
+### 6.5 Content Extraction Refinement
+Currently entire HTML may be converted. Improve by selecting main description node(s). Provide fallback to full page on selector miss.
+Selectors (tentative placeholders): `div.show-more-less-html__markup, div.description__text`.
+Acceptance:
+- When selector present, output markdown length smaller than full-page baseline (
+  measured in test by mocking HTML variants).
 
-## PowerShell Commands
-When running the project on Windows, use these PowerShell-compatible commands:
-- Preferred (uv):
-  - Install/sync deps: `uv sync`
-  - Run tests: `uv run python run_tests.py`
-  - Run scraper (main entry): `uv run python linkedin_scraper.py`
-  - Run service module directly: `uv run python .\scraper_service.py`
-- Legacy (pip/venv):
-  - Install dependencies: `pip install -r requirements.txt`
-  - Run scraper: `python linkedin_scraper.py`
-  - Activate virtual environment: `.\venv\Scripts\Activate.ps1`
+### 6.6 CSV Export
+Add `file_manager.save_jobs_csv(jobs: List[JobPosting]) -> bool`.
+Write UTF-8 (no BOM by default). Columns: job_id,title,url,markdown_content. Proper CSV quoting.
+Controlled by export mode (json|csv|both).
+Acceptance:
+- File exists when `--export csv|both` used.
+- Row count == jobs processed.
 
-## Version Control Best Practices
-**Important**: Commit changes after each development step to maintain a clean project history and enable easy rollback if needed.
+### 6.7 Delay + Jitter
+Add optional jitter percent or absolute seconds; compute `sleep(delay + random.uniform(0, jitter))`.
+Acceptance:
+- When jitter > 0, observed sleeps vary (unit test can patch random.uniform to deterministic values).
 
-PowerShell Git commands:
-- Check status: `git status`
-- Add changes: `git add .` or `git add <specific-file>`
-- Commit changes: `git commit -m "descriptive commit message"`
-- Push to remote: `git push origin main`
+### 6.8 Config File Support
+Load optional `config.toml` if present; CLI overrides config. Provide sample template.
+Acceptance:
+- With config + CLI override, CLI value wins.
 
-## Next Steps
-1. ~~Complete the scraper implementation~~ **→ COMMIT** ✅
-2. Add error handling and logging **→ COMMIT**
-3. Implement rate limiting **→ COMMIT** ✅ (basic implementation)
-4. Add configuration options **→ COMMIT**
-5. Create tests **→ COMMIT**
-6. **NEW**: Integrate URL fetching with main scraper workflow **→ COMMIT**
-7. **NEW**: Add job content filtering and cleanup **→ COMMIT**
+### 6.9 User-Agent & Proxy Support
+Maintain list of benign desktop UA strings; choose sequentially or randomly per request.
+Optional `HTTP_PROXY` / `HTTPS_PROXY` env pass-through.
+Acceptance:
+- Session headers reflect chosen UA; rotates after N calls (test via patched requests).
+
+### 6.10 Testing Enhancements
+Add tests for:
+- Pagination aggregator.
+- Retry logic (simulate failures then success).
+- CSV export integrity and quoting.
+- Logging presence (capture logs; assert key substrings).
+- Jitter application (patch random).
+
+### 6.11 Tooling & CI
+Introduce ruff + black + mypy config files.
+Add GitHub Actions workflow `.github/workflows/ci.yml` with steps: checkout → setup Python → install → lint → type-check → test.
+Acceptance: Passing badge can be added later.
+
+## 7. Execution Order (Recommended)
+1. Align Python version decision (adjust pyproject if needed).
+2. Introduce logging (low coupling, aids later debugging).
+3. Add CLI (exposes knobs for subsequent features).
+4. Implement pagination (foundation for varied loads).
+5. Add retry/backoff (stability under network variance).
+6. Refine content extraction.
+7. Add CSV export.
+8. Add jitter + UA rotation + proxy support.
+9. Expand test suite + tooling (ruff/black/mypy).
+10. Add CI workflow.
+
+## 8. Acceptance Criteria (Global)
+All new features must:
+- Preserve existing passing tests.
+- Include at least one new test validating core happy path + one edge case.
+- Avoid breaking public data model fields (backward compatibility unless version bumped).
+- Use type hints; mypy passes (once introduced).
+- Use logging instead of print.
+- Update README if user-facing behavior changes.
+
+## 9. Non-Goals (Explicitly Excluded For Now)
+- Headless browser automation (Playwright/Selenium).
+- Captcha solving or auth circumvention.
+- High-volume parallel scraping.
+- Persistence layer beyond flat files.
+
+## 10. Risk & Mitigation
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| LinkedIn markup changes | Content extraction breaks | Fallback to full-page markdown; selector list update path |
+| Request throttling / blocks | Data gaps | Backoff + increased delay, UA rotation |
+| Large job sets memory usage | High RAM | Stream page-by-page (future) |
+
+## 11. Metrics (Future Optional)
+- jobs_processed_per_run
+- average_fetch_latency_ms
+- retry_rate_percent
+- extraction_success_rate
+
+## 12. Future Extensions (Backlog)
+- Delta mode (only new jobs since last run).
+- External storage (S3 / database adapter interface).
+- HTML snapshot archiving for auditing.
+- Semantic enrichment (skills extraction, keyword tagging).
+
+## 13. Recent Baseline Changes (Snapshot 2025-08-09)
+- Added consolidated JSON export with markdown inlined.
+- Disabled individual markdown files by default.
+- Added tests for main service, models, and entrypoint integration behavior.
+
+## 14. Agent Operational Protocol
+When acting on this repository:
+1. Read relevant module(s) before modification.
+2. Make smallest coherent change per commit (atomic).
+3. Run test suite after change; if failing, fix or revert.
+4. Update docs (README + this plan) if behavior changes.
+5. Maintain conventional commit messages (type(scope): summary).
+6. Never introduce scraping aggressiveness without explicit instruction.
+
+## 15. Summary For Quick Start (Agent TL;DR)
+Implement missing: logging → CLI → pagination → retries → CSV → content refinement. Each with tests, docs, clean commits.
 
 ---
-
-## Gaps and Enhancements (Added)
-
-### Environment and Versioning
-- Python version alignment:
-  - PyProject currently requires Python ">=3.13" but this plan states 3.8+. Pick a target (recommended: 3.11 or 3.12 for ecosystem stability) and align both places.
-  - Action: Either update `pyproject.toml` requires-python to the chosen version and add dependencies there, or rely solely on `requirements.txt` and remove `requires-python` if not using `pyproject` packaging yet.
-- Dependency management:
-  - Today dependencies live only in `requirements.txt`. Optionally mirror them in `[project] dependencies` for standardized builds.
-
-### Configuration and CLI
-- Add a CLI via argparse to control at runtime:
-  - `--search-term`, `--location`, `--distance`, `--remote`, `--job-type`, `--easy-apply`, `--company-ids`, `--delay`, `--output-dir`, `--max-pages`, `--export {json,csv,both}`.
-- Config file support (optional):
-  - Support a `config.toml` or `config.yaml` to persist defaults; CLI overrides config.
-- Environment variables (optional):
-  - Read from `.env` or process environment for defaults like proxies.
-
-### Logging and Observability
-- Replace print with `logging`:
-  - Levels: DEBUG (HTTP params), INFO (progress), WARNING (recoverable issues), ERROR (failures).
-  - Handlers: console + rotating file handler (e.g., `logs/scraper.log`).
-  - Include job_id and URL in messages for traceability.
-
-### Networking Robustness
-- Retries with backoff:
-  - Use `requests` with `urllib3.Retry` via `HTTPAdapter` (statuses: 429, 500, 502, 503, 504). Exponential backoff, jitter, max retries configurable.
-- Respectful rate limiting:
-  - Keep current delay; allow configuring per-request sleep and optional random jitter.
-- Headers & session:
-  - Rotate User-Agent strings from a small, static list to reduce blocks (configurable).
-  - Optional HTTP/S proxy support (env or config).
-- Pagination:
-  - Iterate `start` in steps of 25 until no results or `--max-pages` reached. Collect all jobs across pages.
-
-### Content Extraction Improvements
-- Targeted extraction of the job description:
-  - Prefer selecting the main description container (e.g., `div.show-more-less-html__markup` or similar) instead of converting the entire page.
-  - Strip nav/footers, cookie banners, and irrelevant sections.
-- Markdown cleanup:
-  - Normalize headings, lists, whitespace; remove tracking parameters from links when possible.
-
-### CSV Export Specification
-- Add CSV export alongside JSON:
-  - Filename: `linkedin_jobs.csv` by default; configurable via `--csv-file`.
-  - Columns: `job_id,title,url,markdown_content` (extend later with `company,location,posted_date,salary` if parsed).
-  - Encoding: UTF-8 with BOM optional on Windows; newline handling set to `newline=''` when writing.
-
-### Testing Strategy Enhancements
-- Add tests for:
-  - Pagination across multiple pages.
-  - Retry/backoff behavior (mock `Session.get` failures then success).
-  - CSV export content and encoding.
-  - Logging: ensure key info is emitted (can validate with a `logging.Handler` stub).
-- Consider `responses` or `requests-mock` for HTTP mocking to reduce patching surface.
-
-### Code Quality and Tooling
-- Linters/formatters: add `ruff` (or flake8) and `black`.
-- Typing: enable `mypy` with strict-ish settings for key modules.
-- Pre-commit: set up hooks for black/ruff/mypy.
-
-### CI/CD (Optional but Recommended)
-- GitHub Actions workflow:
-  - Matrix on OS (windows-latest, ubuntu-latest) and Python (chosen supported versions).
-  - Steps: setup Python → cache pip → install deps → run linters → run tests.
-
-### Known Issues / Notes
-- Individual per-job Markdown files are intentionally disabled by default; consider adding a CLI flag to re-enable if needed.
-- Legal/Ethical: Scraping may violate site Terms of Service. Use responsibly, add higher delays, and avoid heavy traffic. Prefer official APIs where available.
-
----
-
-## Actionable Roadmap (Proposed)
-1. Align Python version and dependencies (pyproject vs requirements).
-2. Add argparse CLI and wire config options into `ScraperService` and `LinkedInClient`.
-3. Introduce `logging` with console + rotating file handler; replace prints.
-4. Implement retries with backoff in `LinkedInClient` session; add jittered rate limiting.
-5. Improve content extraction to target the main job description section.
-6. Add CSV export with clear column spec; keep JSON export.
-7. Implement pagination with `--max-pages` and stop on empty results.
-8. Expand tests for pagination, retries, logging, CSV; add ruff/black/mypy; optional pre-commit.
-9. Add GitHub Actions workflow to run lint and tests on pushes/PRs.
-
-## Recent Changes (2025-08-09)
-- Adopted uv for environment management; added dependencies to `pyproject.toml` and documented uv commands.
-- Implemented TDD step: added tests to ensure no per-job Markdown files are saved; updated service accordingly.
-- Modified `ScraperService` to stop writing per-job `.md` files; only JSON contains markdown content now.
-- Made `scraper_service.py` directly runnable by adding a `__main__` entry with a demo run.
-
-## Acceptance Criteria for New Items
-- CLI: Running with flags changes behavior without code edits; `--help` shows all options.
-- Logging: No `print()` calls remain; logs include job_id and URL; log file rotates and is created.
-- Retries: Transient 5xx/429 errors eventually succeed under test; failures logged with exponential backoff visible in DEBUG.
-- Content: Markdown excludes page chrome; includes headings, lists, and links from the job description.
-- CSV: File created with correct columns and row counts; Windows-friendly line endings; UTF-8 encoding.
-- Pagination: Multiple pages fetched until empty page or `--max-pages` reached.
-- Tests/Quality: All tests green; linters and type checks pass in CI on Windows and Linux.
+End of LLM Execution Plan.
